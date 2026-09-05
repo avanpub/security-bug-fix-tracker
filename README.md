@@ -111,6 +111,9 @@ IDs here (Δ ≈ 1%, snapshot scope); GHSA January 2025 = 224 via independent
 boundary deltas, and the monthly series sums to the verified cumulative total
 13,694.
 
+All scripts under `scripts/` were generated with the LLM **GLM-5.3-Flash**
+(Z.ai), then validated against the cross-check anchors above.
+
 ## Running it yourself
 
 Python 3.10+ (stdlib only). From the repository root:
