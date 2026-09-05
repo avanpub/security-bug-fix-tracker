@@ -24,6 +24,22 @@ into a measurable signal, helping answer two questions:
   counts climb again beyond what previous models produced, that suggests the
   newer model surfaces vulnerabilities its predecessors did not.
 
+**Caveat:** models *find* vulnerabilities, but these charts only count the
+ones that get **fixed**. A continuously high number therefore doesn't
+necessarily mean vulnerabilities are still being discovered — it can also mean
+these projects simply haven't had enough time to fix everything as fast as the
+findings come in. High fix counts can reflect growing discovery *or* a fix
+backlog growing faster than the teams can ship; the signal alone can't
+separate the two.
+
+**Note on the numbers:** our counts may differ slightly from the vendors' own
+articles. Firefox is close but not exact: 424 unique bug IDs in April 2026
+here vs. 423 fixes in Mozilla's write-up. Chrome differs by construction:
+Google reports fixes per milestone (e.g. "1072 fixed in Chrome 149+150"),
+while we bucket them by disclosure month — the common unit that keeps the
+series comparable across projects. See [Methodology](#methodology) for the
+exact counting rules.
+
 The sections below maintain that record month by month, from public and
 verifiable data.
 
