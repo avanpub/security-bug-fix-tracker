@@ -1,9 +1,31 @@
 # Security Bug Fix Trackers
 
 Monthly counts of publicly disclosed security fixes — for **Firefox** (Mozilla
-MFSA), **GitHub reviewed advisories (GHSAs)**, and **Chrome** (Chrome Releases
-blog) — plus a generic per-project GitHub advisory tracker. Pure Python
+MFSA), **Chrome** (Chrome Releases blog), and **GitHub reviewed advisories
+(GHSAs)** — plus a generic per-project GitHub advisory tracker. Pure Python
 standard library, no dependencies. Charts are SVG; data is TSV.
+
+## Why this tracker
+
+Firefox and Chrome are early adopters of cyber frontier models, and their
+public fix streams are the most visible record of what those models do in
+practice. Both vendors have documented the shift themselves: Mozilla in
+[*Behind the Scenes Hardening Firefox*](https://hacks.mozilla.org/2026/05/behind-the-scenes-hardening-firefox/)
+and Google in
+[*Stronger with every update*](https://blog.google/security/chrome-stronger-with-every-update/).
+Tracking how many security fixes they disclose each month turns that activity
+into a measurable signal, helping answer two questions:
+
+- **Is the wave behind us, or still going?** A sustained rise in monthly fixes
+  suggests AI-assisted vulnerability discovery is still accelerating; a plateau
+  suggests the first wave has passed.
+- **Do newer models find bugs that previous ones missed?** When a new frontier
+  model is released, Firefox and Chrome will probably get access to it. If fix
+  counts climb again beyond what previous models produced, that suggests the
+  newer model surfaces vulnerabilities its predecessors did not.
+
+The sections below maintain that record month by month, from public and
+verifiable data.
 
 ---
 
@@ -19,6 +41,17 @@ partial September 2026 (113, striped = month still in progress).
 Data: [`data/mozilla_mfsa.tsv`](data/mozilla_mfsa.tsv) — `month, total,
 critical, high, moderate, low`.
 
+## Chrome
+
+![Chrome Security Bug Fixes by Month](charts/chrome_monthly_chart.svg)
+
+Unique Chromium issue IDs disclosed as security fixes in Chrome Releases
+stable-channel desktop posts, per disclosure month. Flat 2025 (8–34/month),
+then the AI-era explosion: 95 → 124 → 370 (Mar–May 2026), peaking at **1,017
+in June 2026** — more than all of 2025 combined.
+
+Data: [`data/chrome_monthly.tsv`](data/chrome_monthly.tsv) — `month, bug_count`.
+
 ## GitHub reviewed advisories (GHSA)
 
 ![Overall GitHub Reviewed Advisories by Month](charts/ghsa_chart.svg)
@@ -30,17 +63,6 @@ in 2025 to 1,500–1,700/month at the spring 2026 peak. Cumulative since
 
 Data: [`data/ghsa_monthly.tsv`](data/ghsa_monthly.tsv) — `month, ghsa`;
 [`data/ghsa_counts.tsv`](data/ghsa_counts.tsv) — `snapshot_date, reviewed`.
-
-## Chrome
-
-![Chrome Security Bug Fixes by Month](charts/chrome_monthly_chart.svg)
-
-Unique Chromium issue IDs disclosed as security fixes in Chrome Releases
-stable-channel desktop posts, per disclosure month. Flat 2025 (8–34/month),
-then the AI-era explosion: 95 → 124 → 370 (Mar–May 2026), peaking at **1,017
-in June 2026** — more than all of 2025 combined.
-
-Data: [`data/chrome_monthly.tsv`](data/chrome_monthly.tsv) — `month, bug_count`.
 
 ## Per-project tracking
 
@@ -54,12 +76,7 @@ the GHSAs the project itself published (deduplicated by GHSA ID);
 RabbitMQ: 95 affecting / 86 published-by as of 2026-09-05, with a large batch
 in July 2026.
 
-![requests GitHub Advisories by Month](charts/psf_requests_ghsa_chart.svg)
-
-psf/requests: 8 affecting / 4 published-by.
-
-Data: `data/rabbitmq_ghsa_{counts,monthly}.tsv`,
-`data/psf_requests_ghsa_{counts,monthly}.tsv` — columns
+Data: `data/rabbitmq_ghsa_{counts,monthly}.tsv` — columns
 `affecting, published_by` (the `_published_chart.svg` variants chart the
 published_by series).
 
@@ -68,8 +85,8 @@ published_by series).
 | Tracker | Source | Counting |
 |---|---|---|
 | Firefox | `mozilla/foundation-security-advisories` git repo | unique Bugzilla bug IDs per announcement month; desktop Firefox (`fixed_in` Firefox / Firefox ESR); severity at max across the bug's CVEs |
-| GHSA global | GitHub GraphQL `securityAdvisories` + tokenless scrape of github.com/advisories | reviewed-only dataset by definition; monthly via `publishedSince` boundary deltas; snapshot log for the running total |
 | Chrome | Chrome Releases blog (Blogger JSON feed), Stable desktop security posts | unique Chromium issue IDs per post-disclosure month; patch releases of a milestone merge into their months |
+| GHSA global | GitHub GraphQL `securityAdvisories` + tokenless scrape of github.com/advisories | reviewed-only dataset by definition; monthly via `publishedSince` boundary deltas; snapshot log for the running total |
 | Per project | REST `/advisories?affects=` + repo `/security/advisories` pages | affecting = package-DB results ∪ repo-published GHSAs, deduped by GHSA ID; published_by = repo announcements |
 
 Cross-check anchors: Chrome M151 stable post claims 371 fixes — reproduced
@@ -102,10 +119,6 @@ python3 scripts/ghsa_count.py --project rabbitmq \
     --counts data/rabbitmq_ghsa_counts.tsv \
     --monthly data/rabbitmq_ghsa_monthly.tsv \
     --chart charts/rabbitmq_ghsa_chart.svg
-python3 scripts/ghsa_count.py --project psf/requests \
-    --counts data/psf_requests_ghsa_counts.tsv \
-    --monthly data/psf_requests_ghsa_monthly.tsv \
-    --chart charts/psf_requests_ghsa_chart.svg
 ```
 
 `--chart-only` regenerates a chart from the existing TSV without network
