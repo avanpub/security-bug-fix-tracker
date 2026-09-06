@@ -1,0 +1,66 @@
+name: Update tracker data and charts
+
+on:
+  schedule:
+    # Mondays 05:17 UTC (off-peak minute; runs may be delayed a few minutes)
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-charts
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      # Roll-forward cache: keys are immutable once saved, so key on run id and
+      # restore via prefix; each run saves a fresh entry.
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: tracker-cache-${{ github.run_id }}
+          restore-keys: tracker-cache-
+
+      - name: Run trackers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          python3 scripts/mfsa_table.py \
+              --out data/mozilla_mfsa.tsv --chart charts/mozilla_mfsa_chart.svg
+          python3 scripts/chrome_table.py \
+              --out data/chrome_monthly.tsv --chart charts/chrome_monthly_chart.svg
+          python3 scripts/gitlab_table.py \
+              --out data/gitlab_monthly.tsv --chart charts/gitlab_chart.svg
+          python3 scripts/ghsa_count.py \
+              --counts data/ghsa_counts.tsv --monthly data/ghsa_monthly.tsv \
+              --chart charts/ghsa_chart.svg
+          python3 scripts/ghsa_count.py --project rabbitmq --series both \
+              --counts data/rabbitmq_ghsa_counts.tsv \
+              --monthly data/rabbitmq_ghsa_monthly.tsv \
+              --chart charts/rabbitmq_ghsa_chart.svg
+
+      - name: Commit and push if changed
+        run: |
+          if [ -n "$(git status --porcelain data charts)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data charts
+            git commit -m "chore: refresh tracker data and charts [skip ci]"
+            git push
+          else
+            echo "no changes to data/ or charts/"
+          fi

@@ -155,6 +155,14 @@ re-parse) with identical results.
 
 ## Updating this repo
 
-Rerun the commands above, then commit the changed files under `data/` and
-`charts/`. Only the GHSA global monthly series needs a token; never commit
-tokens or keys.
+A weekly GitHub Actions workflow
+(`.github/workflows/update-charts.yml`) refreshes everything automatically:
+every Monday (~05:17 UTC) it runs all five trackers and commits any changed
+files under `data/` and `charts/` as `github-actions[bot]`. No secrets to
+configure — the workflow's built-in token powers the GHSA monthly series, and
+the fetched-source cache (`.cache/`) is persisted between runs. You can also
+trigger it anytime via the "Run workflow" button on the Actions tab.
+
+To update by hand instead, rerun the commands above, then commit the changed
+files under `data/` and `charts/`. Only the GHSA global monthly series needs a
+token; never commit tokens or keys.
