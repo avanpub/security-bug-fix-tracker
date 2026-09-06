@@ -4,7 +4,10 @@
 Some environments resolve dual-stack hosts with a broken IPv6 route first
 (Errno 101 "Network is unreachable"); this helper forces IPv4 resolution and
 retries transient failures with a short backoff. HTTPError (4xx/5xx status
-responses) still propagates so callers can branch on codes like 404.
+responses) still propagates so callers can branch on codes like 404 — except
+403/429 rate-limit responses, which are retried with a backoff (honoring a
+Retry-After header when present, e.g. GitHub secondary limits) before the
+error finally propagates.
 """
 import email.message
 import socket
@@ -16,6 +19,20 @@ _BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")
 
 _RETRY_DELAYS = (2.0, 5.0)
+
+# Backoff for rate-limit style responses (403 secondary limit, 429).
+_RATE_LIMIT_DELAYS = (5.0, 15.0)
+
+_RATE_LIMIT_CODES = frozenset((403, 429))
+
+
+def _rate_limit_delay(exc: urllib.error.HTTPError, attempt: int) -> float:
+    """Seconds to wait after a 403/429 (Retry-After if sent, else backoff)."""
+    try:
+        return min(float(exc.headers.get("Retry-After", "")), 60.0)
+    except (TypeError, ValueError):
+        delays = _RATE_LIMIT_DELAYS
+        return delays[min(attempt, len(delays) - 1)]
 
 
 class _IPv4Resolver:
@@ -37,7 +54,8 @@ class _IPv4Resolver:
 
 def http_request(url: str, *, data: bytes | None = None, headers: dict | None = None,
                  timeout: int = 60, retries: int = 3) -> tuple[bytes, email.message.Message]:
-    """GET/POST with forced IPv4 resolution; retries transient failures only."""
+    """GET/POST with forced IPv4 resolution; retries transient failures and
+    403/429 rate-limit responses, letting other HTTP errors propagate."""
     req_headers = {"User-Agent": _BROWSER_UA, **(headers or {})}
     last_exc: BaseException | None = None
     for attempt in range(retries):
@@ -46,7 +64,11 @@ def http_request(url: str, *, data: bytes | None = None, headers: dict | None = 
                 req = urllib.request.Request(url, data=data, headers=req_headers)
                 with urllib.request.urlopen(req, timeout=timeout) as resp:
                     return resp.read(), resp.headers
-        except urllib.error.HTTPError:
+        except urllib.error.HTTPError as exc:
+            if exc.code in _RATE_LIMIT_CODES and attempt + 1 < retries:
+                time.sleep(_rate_limit_delay(exc, attempt))
+                last_exc = exc
+                continue
             raise
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
             last_exc = exc

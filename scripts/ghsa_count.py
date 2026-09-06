@@ -184,20 +184,26 @@ def _monthly_series(token: str, since: datetime.date, today: datetime.date,
 
 
 def _rest_advisories(url: str, known_ids: set[str] | None = None,
-                     record=None) -> list[dict]:
+                     record=None, token: str | None = None) -> list[dict]:
     """GET /advisories with Link-header pagination; returns all pages.
 
     The listing is newest-first and advisories are immutable, so with
     known_ids paging stops at the first page containing an already-fetched
     advisory (older pages are then known too). record(), when given, receives
-    each page's {ghsa_id: published_date} map for caching.
+    each page's {ghsa_id: published_date} map for caching. token, when given,
+    is sent as a Bearer token: authenticated requests draw on the account's
+    rate limit (5,000/h, or 1,000/h for an Actions GITHUB_TOKEN) instead of
+    the unauthenticated 60/h per-IP pool that CI runners share.
     """
     out = []
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "ghsa-count-tracker",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     while url:
-        body, resp_headers = net_http.http_request(url, headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "ghsa-count-tracker",
-        })
+        body, resp_headers = net_http.http_request(url, headers=headers)
         page = json.loads(body)
         out.extend(page)
         if record is not None:
@@ -213,8 +219,8 @@ def _rest_advisories(url: str, known_ids: set[str] | None = None,
     return out
 
 
-def _project_affecting_rest(packages: list[str],
-                            cache: dict | None = None) -> dict[str, str]:
+def _project_affecting_rest(packages: list[str], cache: dict | None = None,
+                            token: str | None = None) -> dict[str, str]:
     """ghsa_id -> published date for reviewed advisories affecting package names."""
     found = {}
     pkg_cache: dict | None = None if cache is None else cache.setdefault("packages", {})
@@ -225,7 +231,8 @@ def _project_affecting_rest(packages: list[str],
                 f"&affects={urllib.parse.quote(pkg)}&per_page=100")
         record = ((lambda new, _pkg=pkg: pkg_cache.setdefault(_pkg, {}).update(new))
                   if pkg_cache is not None else None)
-        for adv in _rest_advisories(base, known_ids=set(known) or None, record=record):
+        for adv in _rest_advisories(base, known_ids=set(known) or None,
+                                    record=record, token=token):
             found.setdefault(adv["ghsa_id"], adv["published_at"][:10])
     return found
 
@@ -315,9 +322,9 @@ def _discover_packages(ghsa_ids: list[str], token: str, cap: int = 200) -> list[
     return sorted(names)
 
 
-def _project_fetch(project: dict) -> tuple[dict[str, str], dict[str, str | None]]:
+def _project_fetch(project: dict, token: str | None = None) -> tuple[dict[str, str], dict[str, str | None]]:
     """(REST-affecting map, repo-published map) for one PROJECTS entry."""
-    rest = _project_affecting_rest(project["packages"])
+    rest = _project_affecting_rest(project["packages"], token=token)
     published = {}
     for repo in project["repos"]:
         published.update(_project_repo_published(repo))
@@ -476,9 +483,14 @@ def main() -> int:
                     print(f"discovered {len(added)} package name(s) from repo advisories: "
                           f"{', '.join(added[:10])}{' ...' if len(added) > 10 else ''}")
                 packages += added
-            rest = _project_affecting_rest(packages, proj_cache)
+            rest = _project_affecting_rest(packages, proj_cache, token=token)
         except (urllib.error.HTTPError, urllib.error.URLError, RuntimeError) as exc:
             print(f"error: project fetch failed ({exc}); nothing was written")
+            if (isinstance(exc, urllib.error.HTTPError) and exc.code == 403
+                    and not token):
+                print("hint: unauthenticated REST requests share a 60/h per-IP "
+                      "limit (often exhausted on CI runners); set GH_TOKEN to "
+                      "authenticate")
             return 1
         if proj_cache is not None:
             cache_util.save_json(f"ghsa_project_{slug}.json", proj_cache)

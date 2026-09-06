@@ -38,20 +38,36 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
-          python3 scripts/mfsa_table.py \
+          # Non-fail-fast: one tracker failing must not discard fresh data
+          # produced by the others. Failures are recorded, the commit step
+          # still runs, and the final step turns the job red.
+          run_tracker() {
+            name="$1"; shift
+            echo "::group::[$name]"
+            if "$@"; then
+              echo "::endgroup::"
+            else
+              code=$?
+              echo "::endgroup::"
+              echo "::warning::tracker '$name' failed (exit $code) — its data may be stale"
+              echo "$name" >> tracker_failures.txt
+            fi
+          }
+          rm -f tracker_failures.txt
+          run_tracker firefox python3 scripts/mfsa_table.py \
               --out data/mozilla_mfsa.tsv --chart charts/mozilla_mfsa_chart.svg
-          python3 scripts/chrome_table.py \
+          run_tracker chrome python3 scripts/chrome_table.py \
               --out data/chrome_monthly.tsv --chart charts/chrome_monthly_chart.svg
-          python3 scripts/gitlab_table.py \
+          run_tracker gitlab python3 scripts/gitlab_table.py \
               --out data/gitlab_monthly.tsv --chart charts/gitlab_chart.svg
-          python3 scripts/ghsa_count.py \
+          run_tracker ghsa-global python3 scripts/ghsa_count.py \
               --counts data/ghsa_counts.tsv --monthly data/ghsa_monthly.tsv \
               --chart charts/ghsa_chart.svg
-          python3 scripts/ghsa_count.py --project rabbitmq --series both \
+          run_tracker ghsa-rabbitmq python3 scripts/ghsa_count.py --project rabbitmq --series both \
               --counts data/rabbitmq_ghsa_counts.tsv \
               --monthly data/rabbitmq_ghsa_monthly.tsv \
               --chart charts/rabbitmq_ghsa_chart.svg
+          exit 0
 
       - name: Commit and push if changed
         run: |
@@ -63,4 +79,12 @@ jobs:
             git push
           else
             echo "no changes to data/ or charts/"
+          fi
+
+      - name: Fail job if any tracker failed
+        if: always()
+        run: |
+          if [ -s tracker_failures.txt ]; then
+            echo "::error::trackers failed: $(paste -sd, tracker_failures.txt)"
+            exit 1
           fi
