@@ -16,19 +16,27 @@ The SVG chart replicates the visual style of Mozilla's "Firefox Security Bug Fix
 by Month" graphic (dark purple card, lavender bars, dotted gridlines). Layout and
 color constants were extracted pixel-wise from the original 2560x1440 PNG; values
 are expressed here on a 1280x720 logical canvas (the original at half scale).
+
+A `.cache/` directory (see cache_util) persists a shallow clone of the advisory
+repo and the per-file parsed records between runs; `--no-cache` bypasses both.
 """
 import argparse
 import csv
 import datetime
 import glob
+import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 from collections import Counter, defaultdict
 
 import yaml
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import cache_util
 
 REPO_URL = "https://github.com/mozilla/foundation-security-advisories"
 
@@ -96,6 +104,61 @@ def clone_repo(dest: str) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+
+def update_repo(dest: str) -> None:
+    """Refresh an existing shallow clone to the latest commit; re-clone on failure."""
+    if os.path.isdir(os.path.join(dest, ".git")):
+        try:
+            subprocess.run(["git", "fetch", "--depth", "1", "origin"], cwd=dest, check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["git", "reset", "--hard", "FETCH_HEAD"], cwd=dest, check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+        except subprocess.CalledProcessError:
+            shutil.rmtree(dest, ignore_errors=True)
+    clone_repo(dest)
+
+
+def _parse_advisory_file(path: str) -> dict:
+    """Extract everything aggregation needs from one advisory, independent of --since.
+
+    Returns {"hash", "announced" (ISO or None), "nondict", "desktop", "bugs"
+    ([[bug_id, severity], ...])}. `nondict` marks files that are not YAML
+    mappings (excluded without counting as skipped); files with an unparseable
+    `announced` are the ones counted as skipped.
+    """
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    rec = {"hash": hashlib.sha256(raw).hexdigest(), "announced": None,
+           "nondict": False, "desktop": False, "bugs": []}
+    data = yaml.safe_load(raw.decode("utf-8"))
+    if not isinstance(data, dict):
+        rec["nondict"] = True
+        return rec
+    announced = parse_date(str(data.get("announced", "")))
+    if announced is None:
+        return rec
+    rec["announced"] = announced.isoformat()
+    if not any(t in DESKTOP_FIREFOX for t in product_tokens(data)):
+        return rec
+    rec["desktop"] = True
+    bugs = []
+    for entry in (data.get("advisories") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        cve_impact = (entry.get("impact") or "low").strip().lower()
+        for bug in entry.get("bugs") or []:
+            desc = str(bug.get("desc", ""))
+            m = _SEV_DESC_RE.match(desc)
+            severity = m.group(1).lower() if m else cve_impact
+            for tok in str(bug.get("url", "")).split(","):
+                tok = tok.strip()
+                if not re.fullmatch(r"\d+", tok):
+                    continue
+                bugs.append([int(tok), severity])
+    rec["bugs"] = bugs
+    return rec
 
 
 def _month_is_incomplete(month: str, today: datetime.date) -> bool:
@@ -217,6 +280,8 @@ def main() -> int:
     parser.add_argument("--since", default="2025-01-01", help="Include advisories announced on/after this date (YYYY-MM-DD).")
     parser.add_argument("--out", default="mozilla_mfsa.tsv", help="Output TSV path.")
     parser.add_argument("--chart", default="mozilla_mfsa_chart.svg", help="Output SVG chart path (empty string disables).")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Bypass .cache/: fresh clone and full re-parse.")
     args = parser.parse_args()
 
     since = datetime.date.fromisoformat(args.since)
@@ -226,48 +291,61 @@ def main() -> int:
     last_date = since
     skipped = 0
     included = 0
+    cache_hits = 0
 
-    with tempfile.TemporaryDirectory(prefix="mfsa-src-") as tmp:
-        repo = os.path.join(tmp, "repo")
-        clone_repo(repo)
+    cache = None
+    if not args.no_cache:
+        cache = cache_util.load_json("mfsa_parsed.json")
+        if not isinstance(cache, dict):
+            cache = {}
+
+    if cache is None:
+        with tempfile.TemporaryDirectory(prefix="mfsa-src-") as tmp:
+            repo = os.path.join(tmp, "repo")
+            clone_repo(repo)
+            files = sorted(glob.glob(os.path.join(repo, "announce", "*", "mfsa*.yml")))
+            parsed = {os.path.relpath(p, repo): _parse_advisory_file(p) for p in files}
+    else:
+        repo = os.path.join(cache_util.cache_dir(), "mfsa-repo")
+        update_repo(repo)
         files = sorted(glob.glob(os.path.join(repo, "announce", "*", "mfsa*.yml")))
-
+        parsed = {}
         for path in files:
-            with open(path, encoding="utf-8") as fh:
-                data = yaml.safe_load(fh)
-            if not isinstance(data, dict):
-                continue
+            rel = os.path.relpath(path, repo)
+            entry = cache.get(rel)
+            if entry is not None:
+                try:
+                    with open(path, "rb") as fh:
+                        digest = hashlib.sha256(fh.read()).hexdigest()
+                except OSError:
+                    entry = None
+                if entry is not None and digest != entry.get("hash"):
+                    entry = None
+            if entry is None:
+                entry = _parse_advisory_file(path)
+            else:
+                cache_hits += 1
+            parsed[rel] = entry
+        cache_util.save_json("mfsa_parsed.json", parsed)
 
-            announced = parse_date(str(data.get("announced", "")))
-            if announced is None:
-                skipped += 1
-                continue
-            if announced < since:
-                continue
-
-            tokens = product_tokens(data)
-            if not any(t in DESKTOP_FIREFOX for t in tokens):
-                continue
-
-            if announced > last_date:
-                last_date = announced
-            month = announced.strftime("%Y-%m")
-            for entry in (data.get("advisories") or {}).values():
-                if not isinstance(entry, dict):
-                    continue
-                cve_impact = (entry.get("impact") or "low").strip().lower()
-                for bug in entry.get("bugs") or []:
-                    desc = str(bug.get("desc", ""))
-                    m = _SEV_DESC_RE.match(desc)
-                    severity = m.group(1).lower() if m else cve_impact
-                    for tok in str(bug.get("url", "")).split(","):
-                        tok = tok.strip()
-                        if not re.fullmatch(r"\d+", tok):
-                            continue
-                        bug_id = int(tok)
-                        month_bugs[month].add(bug_id)
-                        bug_severities[bug_id].add(severity)
-            included += 1
+    for entry in parsed.values():
+        if entry["nondict"]:
+            continue
+        if entry["announced"] is None:
+            skipped += 1
+            continue
+        announced = datetime.date.fromisoformat(entry["announced"])
+        if announced < since:
+            continue
+        if not entry["desktop"]:
+            continue
+        if announced > last_date:
+            last_date = announced
+        month = announced.strftime("%Y-%m")
+        for bug_id, severity in entry["bugs"]:
+            month_bugs[month].add(bug_id)
+            bug_severities[bug_id].add(severity)
+        included += 1
 
     rows = []
     for month in sorted(month_bugs):
@@ -290,6 +368,9 @@ def main() -> int:
     print(f"wrote {len(rows)} monthly rows to {args.out} (from {included} desktop-Firefox advisories)")
     if args.chart:
         print(f"wrote chart to {args.chart}")
+    if cache_hits:
+        print(f"note: {cache_hits} advisories served from cache "
+              f"({len(parsed) - cache_hits} newly parsed)")
     if skipped:
         print(f"note: skipped {skipped} advisories missing parseable announced")
     return 0

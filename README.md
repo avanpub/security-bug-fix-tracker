@@ -2,8 +2,9 @@
 
 Monthly counts of publicly disclosed security fixes — for **Firefox** (Mozilla
 MFSA), **Chrome** (Chrome Releases blog), and **GitHub reviewed advisories
-(GHSAs)** — plus a generic per-project GitHub advisory tracker. Pure Python
-standard library, no dependencies. Charts are SVG; data is TSV.
+(GHSAs)** — plus a generic per-project GitHub advisory tracker. Python 3.10+
+standard library, plus **PyYAML** (`pip install pyyaml`) and — for the Firefox
+tracker — `git` on PATH. Charts are SVG; data is TSV.
 
 ## Why this tracker
 
@@ -116,7 +117,8 @@ All scripts under `scripts/` were generated with the LLM **GLM-5.3-Flash**
 
 ## Running it yourself
 
-Python 3.10+ (stdlib only). From the repository root:
+Python 3.10+ with **PyYAML** (`pip install pyyaml`); the Firefox tracker also
+needs `git` on PATH. From the repository root:
 
 ```bash
 # Firefox
@@ -145,6 +147,11 @@ access; `--as-of YYYY-MM-DD` (Chrome) and `--since` (all trackers) reproduce
 historical snapshots. Charts auto-mark the current month/milestone as
 incomplete (striped bar + asterisk). Charts regenerate byte-identically from
 the same data.
+
+The Firefox, Chrome, and GHSA trackers cache fetched source data under
+`.cache/` (gitignored): repeated runs re-download only what changed and skip
+re-parsing unchanged history. `--no-cache` bypasses it (fresh fetch, full
+re-parse) with identical results.
 
 ## Updating this repo
 

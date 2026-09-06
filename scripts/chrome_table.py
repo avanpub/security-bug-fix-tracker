@@ -28,6 +28,7 @@ import sys
 from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import cache_util
 import mfsa_table
 import net_http
 
@@ -67,18 +68,38 @@ def _month_keys(since: datetime.date, today: datetime.date) -> list[str]:
     return keys
 
 
-def _collect(since: datetime.date, as_of: datetime.date | None):
-    """(bug ids by month of disclosure, per-post claims)."""
+def _collect(since: datetime.date, as_of: datetime.date | None, cache: dict | None):
+    """(bug ids by month of disclosure, per-post claims).
+
+    Posts are immutable, so with a cache their extractions are reused and
+    paging stops early once a whole page is already covered — valid only when
+    the cache reaches back past --since (tracked via covered_since). Notes
+    print only for posts fetched on this run.
+    """
     bugs: dict[str, set[str]] = defaultdict(set)
     claims: list[tuple] = []
     seen: set[str] = set()
+    posts: dict = {} if cache is None else cache.setdefault("posts", {})
+    covered = cache.get("covered_since") if cache else None
+    covered_ok = bool(covered and covered <= since.isoformat())
+    if posts:
+        # cached posts contribute up front; the feed walk below only
+        # discovers posts fetched for the first time
+        for cached in posts.values():
+            pub = cached["published"]
+            if as_of and pub > as_of.isoformat():
+                continue
+            bugs[pub[:7]] |= set(cached["ids"])
     index, stop = 1, False
+    exhausted = False
     while not stop:
         feed = _fetch_feed(index)
         entries = feed.get("feed", {}).get("entry", [])
         if not entries:
+            exhausted = True
             break
         advanced = 0
+        fresh_found = False
         for entry in entries:
             link = ""
             for item in entry.get("link", []):
@@ -96,26 +117,47 @@ def _collect(since: datetime.date, as_of: datetime.date | None):
                 continue
             if as_of and published > as_of:
                 continue
+            cached = posts.get(link)
+            if cached is not None:
+                bugs[published.strftime("%Y-%m")] |= set(cached["ids"])
+                continue
+            fresh_found = True
             title = entry.get("title", {}).get("$t", "")
             if not _STABLE_TITLE_RE.search(title):
+                posts[link] = {"published": published.isoformat(), "ids": [],
+                               "claimed": None, "note": None}
                 continue
             content = entry.get("content", {}).get("$t", "")
             m = re.search(r"Security Fixes", content, re.I)
             if not m:
-                print(f"note: {published} {title!r} has no security-fix section")
+                note = f"note: {published} {title!r} has no security-fix section"
+                posts[link] = {"published": published.isoformat(), "ids": [],
+                               "claimed": None, "note": note}
+                print(note)
                 continue
             sec = content[m.start():]
             ids = set(_BUG_LINK_RE.findall(sec)) | set(_BUG_BARE_RE.findall(sec))
             if not ids:
-                print(f"note: {published} {title!r}: no issue ids found; skipped")
+                note = f"note: {published} {title!r}: no issue ids found; skipped"
+                posts[link] = {"published": published.isoformat(), "ids": [],
+                               "claimed": None, "note": note}
+                print(note)
                 continue
             bugs[published.strftime("%Y-%m")] |= ids
             plain = re.sub(r"<[^>]+>", " ", sec)
             cm = _CLAIM_RE.search(plain)
             claims.append((published, int(cm.group(1)) if cm else None, len(ids)))
+            posts[link] = {"published": published.isoformat(), "ids": sorted(ids),
+                           "claimed": int(cm.group(1)) if cm else None, "note": None}
         if advanced == 0:
+            exhausted = True
+            break
+        if not stop and cache is not None and not fresh_found and covered_ok:
             break
         index += len(entries)
+    if cache is not None and (stop or exhausted):
+        candidates = [c for c in (covered, since.isoformat()) if c]
+        cache["covered_since"] = min(candidates)
     return bugs, claims
 
 
@@ -161,11 +203,18 @@ def main() -> int:
                         help="Output SVG chart path (empty string disables).")
     parser.add_argument("--chart-only", action="store_true",
                         help="Regenerate only the chart from the existing TSV.")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Bypass .cache/: refetch and re-extract every post.")
     parser.add_argument("--palette", default="google", choices=sorted(PALETTES),
                         help="Color scheme for the SVG chart.")
     args = parser.parse_args()
 
     today = datetime.date.today()
+    cache = None
+    if not args.no_cache:
+        cache = cache_util.load_json("chrome_posts.json")
+        if not isinstance(cache, dict):
+            cache = {}
 
     if args.chart_only:
         rows = _read_tsv(args.out)
@@ -176,10 +225,12 @@ def main() -> int:
     since = datetime.date.fromisoformat(args.since)
     as_of = datetime.date.fromisoformat(args.as_of) if args.as_of else None
     try:
-        bugs, claims = _collect(since, as_of)
+        bugs, claims = _collect(since, as_of, cache)
     except (OSError, RuntimeError) as exc:
         print(f"error: feed fetch failed ({exc}); nothing was written")
         return 1
+    if cache is not None:
+        cache_util.save_json("chrome_posts.json", cache)
 
     for published, claimed, n_ids in claims:
         if claimed and claimed != n_ids:

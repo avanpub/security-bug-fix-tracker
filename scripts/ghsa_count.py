@@ -35,6 +35,10 @@ totalCount equals the site's "All reviewed" figure.
 Token (global monthly only): classic or fine-grained PAT, no scopes required
 (public data). Pass via --token or the GH_TOKEN/GITHUB_TOKEN environment
 variable. Never hard-code it in a file.
+
+The global monthly series and the project REST queries reuse a `.cache/`
+directory between runs (completed months and previously seen advisories are
+immutable); `--no-cache` bypasses it.
 """
 import argparse
 import csv
@@ -47,6 +51,7 @@ import urllib.error
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import cache_util
 import mfsa_table
 import net_http
 
@@ -127,7 +132,15 @@ def _gql_total_count(token: str, published_since: str) -> int:
     return out["data"]["securityAdvisories"]["totalCount"]
 
 
-def _monthly_series(token: str, since: datetime.date, today: datetime.date) -> list[list]:
+def _monthly_series(token: str, since: datetime.date, today: datetime.date,
+                    cache: dict | None = None) -> list[list]:
+    """Monthly counts via publishedSince boundary deltas.
+
+    Completed months are final (new advisories always publish with later
+    dates, so they cancel in the boundary delta), so with a cache only the
+    current month and the most recent completed month are re-queried; older
+    months are served from cached counts.
+    """
     months = []
     y, m = since.year, since.month
     while (y, m) <= (today.year, today.month):
@@ -135,27 +148,62 @@ def _monthly_series(token: str, since: datetime.date, today: datetime.date) -> l
         m += 1
         if m == 13:
             y, m = y + 1, 1
+    served: set[str] = set()
+    if cache:
+        for boundary in months[:-2]:
+            month = boundary.strftime("%Y-%m")
+            if month in cache:
+                served.add(month)
+    needed: list[datetime.date] = []
+    seen_boundaries: set[datetime.date] = set()
+    for i, boundary in enumerate(months):
+        if boundary.strftime("%Y-%m") in served:
+            continue
+        nxt = months[i + 1] if i + 1 < len(months) else None
+        for b in (boundary, nxt):
+            if b is not None and b not in seen_boundaries:
+                seen_boundaries.add(b)
+                needed.append(b)
     cumulative = {}
-    for boundary in months:
+    for boundary in needed:
         cumulative[boundary] = _gql_total_count(
             token, boundary.strftime("%Y-%m-%dT00:00:00Z"))
     rows = []
     for i, boundary in enumerate(months):
+        month = boundary.strftime("%Y-%m")
+        if month in served:
+            rows.append([month, cache[month]])
+            continue
         nxt = months[i + 1] if i + 1 < len(months) else None
         next_count = cumulative.get(nxt, 0) if nxt else 0
-        rows.append([boundary.strftime("%Y-%m"), cumulative[boundary] - next_count])
+        rows.append([month, cumulative[boundary] - next_count])
+    if cache is not None:
+        for row in rows[:-1]:
+            cache[row[0]] = row[1]
     return rows
 
 
-def _rest_advisories(url: str) -> list[dict]:
-    """GET /advisories with Link-header pagination; returns all pages."""
+def _rest_advisories(url: str, known_ids: set[str] | None = None,
+                     record=None) -> list[dict]:
+    """GET /advisories with Link-header pagination; returns all pages.
+
+    The listing is newest-first and advisories are immutable, so with
+    known_ids paging stops at the first page containing an already-fetched
+    advisory (older pages are then known too). record(), when given, receives
+    each page's {ghsa_id: published_date} map for caching.
+    """
     out = []
     while url:
         body, resp_headers = net_http.http_request(url, headers={
             "Accept": "application/vnd.github+json",
             "User-Agent": "ghsa-count-tracker",
         })
-        out.extend(json.loads(body))
+        page = json.loads(body)
+        out.extend(page)
+        if record is not None:
+            record({adv["ghsa_id"]: adv["published_at"][:10] for adv in page})
+        if known_ids and any(adv["ghsa_id"] in known_ids for adv in page):
+            break
         link = resp_headers.get("Link", "")
         url = ""
         for part in link.split(","):
@@ -165,13 +213,19 @@ def _rest_advisories(url: str) -> list[dict]:
     return out
 
 
-def _project_affecting_rest(packages: list[str]) -> dict[str, str]:
+def _project_affecting_rest(packages: list[str],
+                            cache: dict | None = None) -> dict[str, str]:
     """ghsa_id -> published date for reviewed advisories affecting package names."""
     found = {}
+    pkg_cache: dict | None = None if cache is None else cache.setdefault("packages", {})
     for pkg in packages:
+        known = dict(pkg_cache.get(pkg) or ()) if pkg_cache is not None else {}
+        found.update(known)
         base = ("https://api.github.com/advisories?type=reviewed"
                 f"&affects={urllib.parse.quote(pkg)}&per_page=100")
-        for adv in _rest_advisories(base):
+        record = ((lambda new, _pkg=pkg: pkg_cache.setdefault(_pkg, {}).update(new))
+                  if pkg_cache is not None else None)
+        for adv in _rest_advisories(base, known_ids=set(known) or None, record=record):
             found.setdefault(adv["ghsa_id"], adv["published_at"][:10])
     return found
 
@@ -356,6 +410,8 @@ def main() -> int:
                         help="Chart series for project mode.")
     parser.add_argument("--chart-only", action="store_true",
                         help="Regenerate only the chart from the existing monthly TSV (no network, no snapshot).")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Bypass .cache/ (full GraphQL series and REST pagination).")
     parser.add_argument("--palette", default="github-green", choices=sorted(PALETTES),
                         help="Color scheme for the SVG chart.")
     args = parser.parse_args()
@@ -402,6 +458,11 @@ def main() -> int:
     if args.project:
         since = datetime.date.fromisoformat(args.since)
         token = args.token or os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        proj_cache = None
+        if not args.no_cache:
+            proj_cache = cache_util.load_json(f"ghsa_project_{slug}.json")
+            if not isinstance(proj_cache, dict):
+                proj_cache = {}
         try:
             published = {}
             for repo in proj["repos"]:
@@ -415,10 +476,12 @@ def main() -> int:
                     print(f"discovered {len(added)} package name(s) from repo advisories: "
                           f"{', '.join(added[:10])}{' ...' if len(added) > 10 else ''}")
                 packages += added
-            rest = _project_affecting_rest(packages)
+            rest = _project_affecting_rest(packages, proj_cache)
         except (urllib.error.HTTPError, urllib.error.URLError, RuntimeError) as exc:
             print(f"error: project fetch failed ({exc}); nothing was written")
             return 1
+        if proj_cache is not None:
+            cache_util.save_json(f"ghsa_project_{slug}.json", proj_cache)
         if not published:
             print(f"note: no published advisories found on {', '.join(proj['repos'])} security page(s)")
         union = dict(rest)
@@ -464,10 +527,17 @@ def main() -> int:
 
     try:
         since = datetime.date.fromisoformat(args.since)
-        rows = _monthly_series(token, since, today)
+        monthly_cache = None
+        if not args.no_cache:
+            monthly_cache = cache_util.load_json("ghsa_monthly_totals.json")
+            if not isinstance(monthly_cache, dict):
+                monthly_cache = {}
+        rows = _monthly_series(token, since, today, monthly_cache)
     except (OSError, RuntimeError) as exc:
         print(f"note: GraphQL monthly series failed ({exc}); the snapshot was still written")
         return 1
+    if monthly_cache is not None:
+        cache_util.save_json("ghsa_monthly_totals.json", monthly_cache)
 
     with open(args.monthly, "w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh, delimiter="\t", lineterminator="\n")
