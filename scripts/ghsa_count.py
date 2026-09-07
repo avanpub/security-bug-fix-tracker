@@ -22,7 +22,10 @@ Modes:
    itself announced on its repo security page. Package names for REST
    matching come from registry curation (when the repo matches an entry), the
    repo's own name, and --packages; with a token, names are additionally
-   discovered from the repo's own advisories (capped at 200 REST calls).
+   discovered from the repo's own advisories via batched GraphQL
+   `securityAdvisory` lookups (capped at 200 advisories; the REST
+   single-advisory endpoint rejects the Actions GITHUB_TOKEN with 403).
+   Token-authed REST listings fall back to anonymous requests on 403.
    Writes a snapshot log, a monthly TSV and an SVG chart. Without discovery
    no token is needed: project queries are small and the unauthenticated REST
    rate limit (60/h) suffices.
@@ -183,6 +186,20 @@ def _monthly_series(token: str, since: datetime.date, today: datetime.date,
     return rows
 
 
+def _rest_page(url: str, headers: dict, tag: str):
+    """Fetch one REST page; on 403 with a token attached, retry
+    once anonymously (the Actions GITHUB_TOKEN gets 403 from a number of
+    /advisories* endpoints while staying well inside its rate quota)."""
+    try:
+        return net_http.http_request(url, headers=headers, tag=tag, pace=0.3)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 403 or not any(k == "Authorization" for k in headers):
+            raise
+    print("note: tokenised REST request got 403; retrying anonymously", flush=True)
+    anon = {k: v for k, v in headers.items() if k != "Authorization"}
+    return net_http.http_request(url, headers=anon, tag=f"{tag}:anon", pace=0.3)
+
+
 def _rest_advisories(url: str, known_ids: set[str] | None = None,
                      record=None, token: str | None = None,
                      tag: str | None = None) -> list[dict]:
@@ -204,7 +221,7 @@ def _rest_advisories(url: str, known_ids: set[str] | None = None,
     if token:
         headers["Authorization"] = f"Bearer {token}"
     while url:
-        body, resp_headers = net_http.http_request(url, headers=headers, tag=tag, pace=0.3)
+        body, resp_headers = _rest_page(url, headers, tag or "rest")
         page = json.loads(body)
         out.extend(page)
         if record is not None:
@@ -290,38 +307,89 @@ def _resolve_project(value: str) -> tuple[dict, str]:
     return {"title": name, "packages": [], "repos": [value]}, f"{owner}_{name}"
 
 
-def _discover_packages(ghsa_ids: list[str], token: str, cap: int = 200) -> list[str]:
-    """Package names affected by the given advisories (REST, token-authed).
+_GQL_DISCOVERY_BATCH = 30
 
-    Repo-published advisories may be absent from the global advisory DB
-    (repo-only entries 404 on /advisories/{id}); those are skipped.
+
+def _gql_discovery_query(ids: list[str]) -> str:
+    decls = "\n".join(
+        f'    a{i}: securityAdvisory(identifier: {{ghsaId: "{ghsa}"}}) '
+        f'{{ vulnerabilities {{ package {{ name }} }} }}'
+        for i, ghsa in enumerate(ids))
+    return "query {\n" + decls + "\n}"
+
+
+def _gql_discovery_batch(ids: list[str], token: str) -> dict[str, list[str] | None]:
+    """ghsa_id -> sorted package names (None if not in the advisory DB)."""
+    body = json.dumps({"query": _gql_discovery_query(ids)}).encode()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "User-Agent": "ghsa-count-tracker",
+    }
+    try:
+        resp_body, _headers = net_http.http_request(
+            GRAPHQL_URL, data=body, headers=headers, tag="graphql-discovery")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 403:
+            print("note: tokenised GraphQL discovery got 403; retrying anonymously", flush=True)
+            anon = {k: v for k, v in headers.items() if k != "Authorization"}
+            resp_body, _headers = net_http.http_request(
+                GRAPHQL_URL, data=body, headers=anon, tag="graphql-discovery:anon")
+        else:
+            raise
+    out = json.loads(resp_body)
+    if not isinstance(out.get("data"), dict) or out.get("errors"):
+        raise RuntimeError(f"GraphQL discovery errors: {json.dumps(out.get('errors', []))[:400]}")
+    data = out["data"]
+    result: dict[str, list[str] | None] = {}
+    for i, ghsa in enumerate(ids):
+        node = data.get(f"a{i}")
+        if node is None:
+            result[ghsa] = None
+            continue
+        pkgs = sorted({v["package"]["name"] for v in node.get("vulnerabilities", [])
+                       if (v.get("package") or {}).get("name")})
+        result[ghsa] = pkgs
+    return result
+
+
+def _discover_packages(ghsa_ids: list[str], token: str, cap: int = 200,
+                       cache: dict | None = None) -> list[str]:
+    """Package names affected by the given advisories.
+
+    Batched GraphQL `securityAdvisory` lookups (the REST single-advisory
+    endpoint rejects the Actions GITHUB_TOKEN with 403 while the quota is
+    untouched). Repo-published advisories may be absent from the Advisory
+    Database (null node); those are skipped. Results are cached
+    per GHSA id (cache["discovery"]) and saved incrementally by the caller,
+    so future runs only query uncached ids.
     """
     names: set[str] = set()
-    ids = sorted(ghsa_ids)
+    disc_cache: dict | None = None if cache is None else cache.setdefault("discovery", {})
+    ids = sorted(set(ghsa_ids))
     if len(ids) > cap:
         print(f"note: discovery capped at {cap} of {len(ids)} repo advisories")
         ids = ids[:cap]
-    missing = 0
+    todo: list[str] = []
+    fresh_missing: list[str] = []
     for ghsa in ids:
-        try:
-            body, _headers = net_http.http_request(
-                f"https://api.github.com/advisories/{ghsa}", headers={
-                    "Accept": "application/vnd.github+json",
-                    "Authorization": f"Bearer {token}",
-                    "User-Agent": "ghsa-count-tracker",
-                }, tag=f"rest-discovery:{ghsa}", pace=0.3)
-            adv = json.loads(body)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                missing += 1
-                continue
-            raise
-        for v in adv.get("vulnerabilities", []):
-            pkg = v.get("package") or {}
-            if pkg.get("name"):
-                names.add(pkg["name"])
-    if missing:
-        print(f"note: {missing} repo advisories are not in the global advisory DB "
+        cached = disc_cache.get(ghsa) if disc_cache is not None else None
+        if cached is None:
+            todo.append(ghsa)
+        else:
+            names.update(cached)
+    for i in range(0, len(todo), _GQL_DISCOVERY_BATCH):
+        batch_result = _gql_discovery_batch(todo[i:i + _GQL_DISCOVERY_BATCH], token)
+        for ghsa, pkgs in batch_result.items():
+            if pkgs is None:
+                fresh_missing.append(ghsa)
+            else:
+                names.update(pkgs)
+                if disc_cache is not None:
+                    disc_cache[ghsa] = pkgs
+    if fresh_missing:
+        print(f"note: {len(fresh_missing)} repo advisories are not in the global advisory DB "
               f"(repo-only); skipped in discovery")
     return sorted(names)
 
@@ -481,7 +549,7 @@ def main() -> int:
             packages = list(dict.fromkeys(
                 proj["packages"] + [proj["repos"][0].split("/", 1)[1]]))
             if token and published:
-                discovered = _discover_packages(sorted(published), token)
+                discovered = _discover_packages(sorted(published), token, cache=proj_cache)
                 added = [n for n in discovered if n not in packages]
                 if added:
                     print(f"discovered {len(added)} package name(s) from repo advisories: "
@@ -489,6 +557,8 @@ def main() -> int:
                 packages += added
             rest = _project_affecting_rest(packages, proj_cache, token=token)
         except (urllib.error.HTTPError, urllib.error.URLError, RuntimeError) as exc:
+            if proj_cache is not None and proj_cache.get("discovery"):
+                cache_util.save_json(f"ghsa_project_{slug}.json", proj_cache)
             print(f"error: token={token is not None}")
             print(f"error: project fetch failed ({exc!r}); nothing was written")
             if (isinstance(exc, urllib.error.HTTPError) and exc.code == 403
