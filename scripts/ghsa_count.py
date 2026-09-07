@@ -23,7 +23,7 @@ Modes:
    matching come from registry curation (when the repo matches an entry), the
    repo's own name, and --packages; with a token, names are additionally
    discovered from the repo's own advisories via batched GraphQL
-   `securityAdvisory` lookups (capped at 200 advisories; the REST
+   `securityAdvisory(ghsaId:)` lookups (capped at 200 advisories; the REST
    single-advisory endpoint rejects the Actions GITHUB_TOKEN with 403).
    Token-authed REST listings fall back to anonymous requests on 403.
    Writes a snapshot log, a monthly TSV and an SVG chart. Without discovery
@@ -312,8 +312,8 @@ _GQL_DISCOVERY_BATCH = 30
 
 def _gql_discovery_query(ids: list[str]) -> str:
     decls = "\n".join(
-        f'    a{i}: securityAdvisory(identifier: {{ghsaId: "{ghsa}"}}) '
-        f'{{ vulnerabilities {{ package {{ name }} }} }}'
+        f'    a{i}: securityAdvisory(ghsaId: "{ghsa}") '
+        f'{{ vulnerabilities(first: 100) {{ nodes {{ package {{ name }} }} }} }}'
         for i, ghsa in enumerate(ids))
     return "query {\n" + decls + "\n}"
 
@@ -339,8 +339,13 @@ def _gql_discovery_batch(ids: list[str], token: str) -> dict[str, list[str] | No
         else:
             raise
     out = json.loads(resp_body)
-    if not isinstance(out.get("data"), dict) or out.get("errors"):
-        raise RuntimeError(f"GraphQL discovery errors: {json.dumps(out.get('errors', []))[:400]}")
+    if not isinstance(out.get("data"), dict):
+        raise RuntimeError(f"GraphQL discovery response missing data "
+                           f"(errors: {json.dumps(out.get('errors', []))[:400]})")
+    for err in out.get("errors", []):
+        path = err.get("path") or []
+        if (err.get("type") != "NOT_FOUND" or len(path) != 1 or path[0] not in out["data"]):
+            raise RuntimeError(f"GraphQL discovery errors: {json.dumps(out['errors'])[:400]}")
     data = out["data"]
     result: dict[str, list[str] | None] = {}
     for i, ghsa in enumerate(ids):
@@ -348,7 +353,8 @@ def _gql_discovery_batch(ids: list[str], token: str) -> dict[str, list[str] | No
         if node is None:
             result[ghsa] = None
             continue
-        pkgs = sorted({v["package"]["name"] for v in node.get("vulnerabilities", [])
+        vulns = node.get("vulnerabilities") or {}
+        pkgs = sorted({v["package"]["name"] for v in vulns.get("nodes", [])
                        if (v.get("package") or {}).get("name")})
         result[ghsa] = pkgs
     return result
