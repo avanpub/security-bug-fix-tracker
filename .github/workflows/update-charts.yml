@@ -62,6 +62,8 @@ jobs:
               --out data/gitlab_monthly.tsv --chart charts/gitlab_chart.svg
           run_tracker msrc python3 scripts/msrc_table.py \
               --out data/msrc_monthly.tsv --chart charts/msrc_chart.svg
+          run_tracker kernel python3 scripts/kernel_cve_table.py \
+              --out data/kernel_monthly.tsv --chart charts/kernel_chart.svg
           run_tracker ghsa-global python3 scripts/ghsa_count.py \
               --counts data/ghsa_counts.tsv --monthly data/ghsa_monthly.tsv \
               --chart charts/ghsa_chart.svg

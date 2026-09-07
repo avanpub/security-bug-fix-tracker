@@ -2,10 +2,10 @@
 
 Monthly counts of publicly disclosed security fixes — for **Firefox** (Mozilla
 MFSA), **Chrome** (Chrome Releases blog), **Microsoft** (MSRC Patch Tuesday),
-and **GitHub reviewed advisories (GHSAs)** — plus a generic per-project GitHub
-advisory tracker. Python 3.10+ standard library, plus **PyYAML**
-(`pip install pyyaml`) and — for the Firefox tracker — `git` on PATH. Charts
-are SVG; data is TSV.
+the **Linux kernel** (kernel.org CNA), and **GitHub reviewed advisories
+(GHSAs)** — plus a generic per-project GitHub advisory tracker. Python 3.10+
+standard library, plus **PyYAML** (`pip install pyyaml`) and — for the Firefox
+and kernel trackers — `git` on PATH. Charts are SVG; data is TSV.
 
 ## Why this tracker
 
@@ -86,6 +86,21 @@ and GHSA trackers here) are excluded.
 Data: [`data/msrc_monthly.tsv`](data/msrc_monthly.tsv) — `month, total,
 critical, important, moderate, low, unknown`.
 
+## Linux kernel
+
+![Linux Kernel CVEs by Month](charts/kernel_chart.svg)
+
+Unique CVEs published by the kernel.org CVE assignment team, per disclosure
+month since January 2025 — the largest single fix stream tracked here
+(~4.3k CVEs in 2024, ~5.7k in 2025). The program (started February 2024)
+assigns a CVE to every merged stable-tree security fix and publishes in
+bursts: 1,055 in December 2025 and 1,645 in August 2026, including batches of
+older CVE ids cleared from the team's backlog. CVEs later rejected drop out
+retroactively (current-state counting). No severity breakdown — the kernel
+team deliberately does not score CVEs.
+
+Data: [`data/kernel_monthly.tsv`](data/kernel_monthly.tsv) — `month, total`.
+
 ## GitHub reviewed advisories (GHSA)
 
 ![Overall GitHub Reviewed Advisories by Month](charts/ghsa_chart.svg)
@@ -121,6 +136,7 @@ published_by series).
 | Firefox | `mozilla/foundation-security-advisories` git repo | unique Bugzilla bug IDs per announcement month; desktop Firefox (`fixed_in` Firefox / Firefox ESR); severity at max across the bug's CVEs |
 | Chrome | Chrome Releases blog (Blogger JSON feed), Stable desktop security posts | unique Chromium issue IDs per post-disclosure month; patch releases of a milestone merge into their months |
 | Microsoft | MSRC CVRF API v3.0 (`api.msrc.microsoft.com`, tokenless) | unique CVEs in each monthly CVRF document whose earliest revision falls in [1st of month, end of Patch Tuesday]; third-party CNA mirror rows (Chromium/GitHub/MITRE/... credited titles) and Azure-Linux-only package rows excluded; severity = max MSRC rating per CVE |
+| Linux kernel | kernel.org CNA repo `vulns.git` (full git clone in `.cache/`) | unique CVEs currently under `cve/published/`, bucketed by the earliest git commit that added them there (= cve.org `datePublished`); later-rejected CVEs drop out retroactively; no severity (kernel CNA does not score) |
 | GHSA global | GitHub GraphQL `securityAdvisories` + tokenless scrape of github.com/advisories | reviewed-only dataset by definition; monthly via `publishedSince` boundary deltas; snapshot log for the running total |
 | Per project | REST `/advisories?affects=` + repo `/security/advisories` pages | affecting = package-DB results ∪ repo-published GHSAs, deduped by GHSA ID; published_by = repo announcements |
 
@@ -130,9 +146,11 @@ IDs here (Δ ≈ 1%, snapshot scope); Microsoft January 2025 = 159 reproduces
 ZDI's headline exactly, July 2026 = 622 vs ZDI's 621 (ZDI's export missed
 CVE-2026-47301) and August 2026 = 422 vs ZDI's 420 (rows published later on
 Patch Tuesday that ZDI's snapshot missed, minus 2 MITRE-credited TPM rows
-ZDI's table includes); GHSA January 2025 = 224 via independent
-boundary deltas, and the monthly series sums to the verified cumulative total
-13,694.
+ZDI's table includes); Linux kernel disclosure months match cve.org
+`datePublished` for 15/15 random spot checks (2024-05..2026-08) and the
+program totals match the team's published ~10 CVEs/day pace; GHSA
+January 2025 = 224 via independent boundary deltas, and the monthly series
+sums to the verified cumulative total 13,694.
 
 All scripts under `scripts/` were generated with the LLM **GLM-5.3-Flash**
 (Z.ai), then validated against the cross-check anchors above.
@@ -155,6 +173,10 @@ python3 scripts/chrome_table.py \
 python3 scripts/msrc_table.py \
     --out data/msrc_monthly.tsv --chart charts/msrc_chart.svg
 
+# Linux kernel (tokenless; needs git; full clone of vulns.git ~150 MB)
+python3 scripts/kernel_cve_table.py \
+    --out data/kernel_monthly.tsv --chart charts/kernel_chart.svg
+
 # GitHub reviewed advisories (snapshot works tokenless; the monthly series
 # needs a token via GH_TOKEN — no scopes required for public data)
 python3 scripts/ghsa_count.py \
@@ -174,17 +196,19 @@ historical snapshots. Charts auto-mark the current month/milestone as
 incomplete (striped bar + asterisk). Charts regenerate byte-identically from
 the same data.
 
-The Firefox, Chrome, GHSA, and Microsoft trackers cache fetched source data
-under `.cache/` (gitignored): repeated runs re-download only what changed and
-skip re-parsing unchanged history (the Microsoft tracker caches computed
-per-month aggregates, since completed Patch Tuesday windows are immutable).
-`--no-cache` bypasses it (fresh fetch, full re-parse) with identical results.
+The Firefox, Chrome, GHSA, Microsoft, and kernel trackers cache fetched
+source data under `.cache/` (gitignored): repeated runs re-download only what
+changed and skip re-parsing unchanged history (Microsoft caches computed
+per-month aggregates, since completed Patch Tuesday windows are immutable;
+the kernel tracker keeps a full clone of vulns.git, since publication dates
+come from git history). `--no-cache` bypasses it (fresh fetch, full re-parse)
+with identical results.
 
 ## Updating this repo
 
 A weekly GitHub Actions workflow
 (`.github/workflows/update-charts.yml`) refreshes everything automatically:
-every Monday (~05:17 UTC) it runs all six trackers and commits any changed
+every Monday (~05:17 UTC) it runs all seven trackers and commits any changed
 files under `data/` and `charts/` as `github-actions[bot]`. No secrets to
 configure — the workflow's built-in token powers the GHSA monthly series, and
 the fetched-source cache (`.cache/`) is persisted between runs. You can also
