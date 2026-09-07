@@ -64,6 +64,8 @@ jobs:
               --out data/msrc_monthly.tsv --chart charts/msrc_chart.svg
           run_tracker kernel python3 scripts/kernel_cve_table.py \
               --out data/kernel_monthly.tsv --chart charts/kernel_chart.svg
+          run_tracker redhat python3 scripts/redhat_table.py \
+              --out data/redhat_monthly.tsv --chart charts/redhat_chart.svg
           run_tracker ghsa-global python3 scripts/ghsa_count.py \
               --counts data/ghsa_counts.tsv --monthly data/ghsa_monthly.tsv \
               --chart charts/ghsa_chart.svg
