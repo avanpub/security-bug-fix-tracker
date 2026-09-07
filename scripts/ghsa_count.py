@@ -118,7 +118,7 @@ def _update_snapshot_tsv(path: str, today: datetime.date, header: list[str], val
         writer.writerows(rows)
 
 
-def _gql_total_count(token: str, published_since: str) -> int:
+def _gql_total_count(token: str, published_since: str, tag: str | None = None) -> int:
     body = json.dumps({"query": _GQL_TEMPLATE % published_since}).encode()
     resp_body, _headers = net_http.http_request(GRAPHQL_URL, data=body, headers={
         "Authorization": f"Bearer {token}",
@@ -167,7 +167,7 @@ def _monthly_series(token: str, since: datetime.date, today: datetime.date,
     cumulative = {}
     for boundary in needed:
         cumulative[boundary] = _gql_total_count(
-            token, boundary.strftime("%Y-%m-%dT00:00:00Z"))
+            token, boundary.strftime("%Y-%m-%dT00:00:00Z"), tag="graphql-totalCount")
     rows = []
     for i, boundary in enumerate(months):
         month = boundary.strftime("%Y-%m")
@@ -184,7 +184,8 @@ def _monthly_series(token: str, since: datetime.date, today: datetime.date,
 
 
 def _rest_advisories(url: str, known_ids: set[str] | None = None,
-                     record=None, token: str | None = None) -> list[dict]:
+                     record=None, token: str | None = None,
+                     tag: str | None = None) -> list[dict]:
     """GET /advisories with Link-header pagination; returns all pages.
 
     The listing is newest-first and advisories are immutable, so with
@@ -203,7 +204,7 @@ def _rest_advisories(url: str, known_ids: set[str] | None = None,
     if token:
         headers["Authorization"] = f"Bearer {token}"
     while url:
-        body, resp_headers = net_http.http_request(url, headers=headers)
+        body, resp_headers = net_http.http_request(url, headers=headers, tag=tag, pace=0.3)
         page = json.loads(body)
         out.extend(page)
         if record is not None:
@@ -232,7 +233,8 @@ def _project_affecting_rest(packages: list[str], cache: dict | None = None,
         record = ((lambda new, _pkg=pkg: pkg_cache.setdefault(_pkg, {}).update(new))
                   if pkg_cache is not None else None)
         for adv in _rest_advisories(base, known_ids=set(known) or None,
-                                    record=record, token=token):
+                                    record=record, token=token,
+                                    tag=f"rest-affects:{pkg}"):
             found.setdefault(adv["ghsa_id"], adv["published_at"][:10])
     return found
 
@@ -241,7 +243,9 @@ def _fetch_repo_advisories_page(repo: str, page: int) -> str:
     url = f"https://github.com/{repo}/security/advisories"
     if page > 1:
         url += f"?page={page}"
-    body, _headers = net_http.http_request(url, headers={"Accept": "text/html"})
+    body, _headers = net_http.http_request(
+        url, headers={"Accept": "text/html"},
+        tag=f"repo-security-page:{repo}:p{page}")
     return body.decode("utf-8", "replace")
 
 
@@ -305,7 +309,7 @@ def _discover_packages(ghsa_ids: list[str], token: str, cap: int = 200) -> list[
                     "Accept": "application/vnd.github+json",
                     "Authorization": f"Bearer {token}",
                     "User-Agent": "ghsa-count-tracker",
-                })
+                }, tag=f"rest-discovery:{ghsa}", pace=0.3)
             adv = json.loads(body)
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
@@ -485,7 +489,8 @@ def main() -> int:
                 packages += added
             rest = _project_affecting_rest(packages, proj_cache, token=token)
         except (urllib.error.HTTPError, urllib.error.URLError, RuntimeError) as exc:
-            print(f"error: project fetch failed ({exc}); nothing was written")
+            print(f"error: token={token is not None}")
+            print(f"error: project fetch failed ({exc!r}); nothing was written")
             if (isinstance(exc, urllib.error.HTTPError) and exc.code == 403
                     and not token):
                 print("hint: unauthenticated REST requests share a 60/h per-IP "
