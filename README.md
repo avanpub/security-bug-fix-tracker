@@ -1,10 +1,11 @@
 # Security Bug Fix Trackers
 
 Monthly counts of publicly disclosed security fixes — for **Firefox** (Mozilla
-MFSA), **Chrome** (Chrome Releases blog), and **GitHub reviewed advisories
-(GHSAs)** — plus a generic per-project GitHub advisory tracker. Python 3.10+
-standard library, plus **PyYAML** (`pip install pyyaml`) and — for the Firefox
-tracker — `git` on PATH. Charts are SVG; data is TSV.
+MFSA), **Chrome** (Chrome Releases blog), **Microsoft** (MSRC Patch Tuesday),
+and **GitHub reviewed advisories (GHSAs)** — plus a generic per-project GitHub
+advisory tracker. Python 3.10+ standard library, plus **PyYAML**
+(`pip install pyyaml`) and — for the Firefox tracker — `git` on PATH. Charts
+are SVG; data is TSV.
 
 ## Why this tracker
 
@@ -69,6 +70,22 @@ in June 2026** — more than all of 2025 combined.
 
 Data: [`data/chrome_monthly.tsv`](data/chrome_monthly.tsv) — `month, bug_count`.
 
+## Microsoft
+
+![Microsoft Security Fixes by Month](charts/msrc_chart.svg)
+
+Unique CVEs fixed in each Microsoft Patch Tuesday release (MSRC Security
+Update Guide), per release month since January 2025. The largest fix stream of
+the four: 59–177 CVEs/month through 2025, then the same 2026 acceleration seen
+elsewhere — 178 (Apr) → 209 (Jun) → **622 in July 2026**, the release the Zero
+Day Initiative called the "bug apocalypse", easing to 422 in August. Microsoft
+discloses online-service CVEs alongside product fixes; third-party CNA rows
+mirrored into the guide (Chromium, GitHub, MITRE, ... — counted by the Chrome
+and GHSA trackers here) are excluded.
+
+Data: [`data/msrc_monthly.tsv`](data/msrc_monthly.tsv) — `month, total,
+critical, important, moderate, low, unknown`.
+
 ## GitHub reviewed advisories (GHSA)
 
 ![Overall GitHub Reviewed Advisories by Month](charts/ghsa_chart.svg)
@@ -103,12 +120,17 @@ published_by series).
 |---|---|---|
 | Firefox | `mozilla/foundation-security-advisories` git repo | unique Bugzilla bug IDs per announcement month; desktop Firefox (`fixed_in` Firefox / Firefox ESR); severity at max across the bug's CVEs |
 | Chrome | Chrome Releases blog (Blogger JSON feed), Stable desktop security posts | unique Chromium issue IDs per post-disclosure month; patch releases of a milestone merge into their months |
+| Microsoft | MSRC CVRF API v3.0 (`api.msrc.microsoft.com`, tokenless) | unique CVEs in each monthly CVRF document whose earliest revision falls in [1st of month, end of Patch Tuesday]; third-party CNA mirror rows (Chromium/GitHub/MITRE/... credited titles) and Azure-Linux-only package rows excluded; severity = max MSRC rating per CVE |
 | GHSA global | GitHub GraphQL `securityAdvisories` + tokenless scrape of github.com/advisories | reviewed-only dataset by definition; monthly via `publishedSince` boundary deltas; snapshot log for the running total |
 | Per project | REST `/advisories?affects=` + repo `/security/advisories` pages | affecting = package-DB results ∪ repo-published GHSAs, deduped by GHSA ID; published_by = repo announcements |
 
 Cross-check anchors: Chrome M151 stable post claims 371 fixes — reproduced
 exactly; Google's "1072 fixed in Chrome 149+150" corresponds to 1082 unique
-IDs here (Δ ≈ 1%, snapshot scope); GHSA January 2025 = 224 via independent
+IDs here (Δ ≈ 1%, snapshot scope); Microsoft January 2025 = 159 reproduces
+ZDI's headline exactly, July 2026 = 622 vs ZDI's 621 (ZDI's export missed
+CVE-2026-47301) and August 2026 = 422 vs ZDI's 420 (rows published later on
+Patch Tuesday that ZDI's snapshot missed, minus 2 MITRE-credited TPM rows
+ZDI's table includes); GHSA January 2025 = 224 via independent
 boundary deltas, and the monthly series sums to the verified cumulative total
 13,694.
 
@@ -129,6 +151,10 @@ python3 scripts/mfsa_table.py \
 python3 scripts/chrome_table.py \
     --out data/chrome_monthly.tsv --chart charts/chrome_monthly_chart.svg
 
+# Microsoft Patch Tuesday (tokenless)
+python3 scripts/msrc_table.py \
+    --out data/msrc_monthly.tsv --chart charts/msrc_chart.svg
+
 # GitHub reviewed advisories (snapshot works tokenless; the monthly series
 # needs a token via GH_TOKEN — no scopes required for public data)
 python3 scripts/ghsa_count.py \
@@ -148,16 +174,17 @@ historical snapshots. Charts auto-mark the current month/milestone as
 incomplete (striped bar + asterisk). Charts regenerate byte-identically from
 the same data.
 
-The Firefox, Chrome, and GHSA trackers cache fetched source data under
-`.cache/` (gitignored): repeated runs re-download only what changed and skip
-re-parsing unchanged history. `--no-cache` bypasses it (fresh fetch, full
-re-parse) with identical results.
+The Firefox, Chrome, GHSA, and Microsoft trackers cache fetched source data
+under `.cache/` (gitignored): repeated runs re-download only what changed and
+skip re-parsing unchanged history (the Microsoft tracker caches computed
+per-month aggregates, since completed Patch Tuesday windows are immutable).
+`--no-cache` bypasses it (fresh fetch, full re-parse) with identical results.
 
 ## Updating this repo
 
 A weekly GitHub Actions workflow
 (`.github/workflows/update-charts.yml`) refreshes everything automatically:
-every Monday (~05:17 UTC) it runs all five trackers and commits any changed
+every Monday (~05:17 UTC) it runs all six trackers and commits any changed
 files under `data/` and `charts/` as `github-actions[bot]`. No secrets to
 configure — the workflow's built-in token powers the GHSA monthly series, and
 the fetched-source cache (`.cache/`) is persisted between runs. You can also
