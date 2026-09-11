@@ -73,6 +73,10 @@ jobs:
               --counts data/rabbitmq_ghsa_counts.tsv \
               --monthly data/rabbitmq_ghsa_monthly.tsv \
               --chart charts/rabbitmq_ghsa_chart.svg
+          run_tracker ghsa-vscode python3 scripts/ghsa_count.py --project vscode --series both \
+              --counts data/vscode_ghsa_counts.tsv \
+              --monthly data/vscode_ghsa_monthly.tsv \
+              --chart charts/vscode_ghsa_chart.svg
           exit 0
 
       - name: Commit and push if changed

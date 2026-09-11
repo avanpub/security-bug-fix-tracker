@@ -139,6 +139,8 @@ package-database advisories matching the project's package names, unioned with
 the GHSAs the project itself published (deduplicated by GHSA ID);
 **published_by** = the advisories announced on the project's own security page.
 
+### RabbitMQ
+
 ![RabbitMQ GitHub Advisories by Month](charts/rabbitmq_ghsa_chart.svg)
 
 RabbitMQ: 95 affecting / 86 published-by as of 2026-09-05, with a large batch
@@ -147,6 +149,21 @@ in July 2026.
 Data: `data/rabbitmq_ghsa_{counts,monthly}.tsv` — columns
 `affecting, published_by` (the `_published_chart.svg` variants chart the
 published_by series).
+
+### Visual Studio Code
+
+![Visual Studio Code GitHub Advisories by Month](charts/vscode_ghsa_chart.svg)
+
+VS Code: 54 affecting / 54 published-by as of 2026-09-11, all announced by the
+`microsoft/vscode` repo on Patch Tuesdays. Flat through 2025 (2 in February,
+1 each in April/May), then the 2026 ramp: 4 in February, 4 in May, 4 in June,
+3 in July, 9 in August, 11 in September (partial). VS Code is not a
+package-database package and its repo advisories are not in the GitHub Advisory
+Database, so here `affecting` equals the repo-published stream and the
+`_published_chart.svg` variant is the exact one.
+
+Data: `data/vscode_ghsa_{counts,monthly}.tsv` — columns
+`affecting, published_by`.
 
 ## Methodology
 
@@ -216,6 +233,11 @@ python3 scripts/ghsa_count.py --project rabbitmq \
     --counts data/rabbitmq_ghsa_counts.tsv \
     --monthly data/rabbitmq_ghsa_monthly.tsv \
     --chart charts/rabbitmq_ghsa_chart.svg
+
+python3 scripts/ghsa_count.py --project vscode --series both \
+    --counts data/vscode_ghsa_counts.tsv \
+    --monthly data/vscode_ghsa_monthly.tsv \
+    --chart charts/vscode_ghsa_chart.svg
 ```
 
 `--chart-only` regenerates a chart from the existing TSV without network
@@ -239,7 +261,7 @@ with identical results.
 
 A weekly GitHub Actions workflow
 (`.github/workflows/update-charts.yml`) refreshes everything automatically:
-every Monday (~05:17 UTC) it runs all eight trackers and commits any changed
+every Monday (~05:17 UTC) it runs all nine trackers and commits any changed
 files under `data/` and `charts/` as `github-actions[bot]`. No secrets to
 configure — the workflow's built-in token powers the GHSA monthly series, and
 the fetched-source cache (`.cache/`) is persisted between runs. You can also

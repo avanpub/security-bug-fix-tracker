@@ -84,6 +84,11 @@ PROJECTS = {
         "packages": ["rabbitmq", "com.rabbitmq:amqp-client"],
         "repos": ["rabbitmq/rabbitmq-server"],
     },
+    "vscode": {
+        "title": "Visual Studio Code",
+        "packages": ["vscode"],
+        "repos": ["microsoft/vscode"],
+    },
 }
 
 _GHSA_RE = re.compile(r"GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}")
