@@ -57,6 +57,7 @@ Unique Bugzilla bug IDs disclosed in Mozilla Foundation Security Advisories
 fixes/month through 2025, with a single large spike in April 2026 (424) and a
 partial September 2026 (113, striped = month still in progress).
 
+Source: [mozilla/foundation-security-advisories](https://github.com/mozilla/foundation-security-advisories).
 Data: [`data/mozilla_mfsa.tsv`](data/mozilla_mfsa.tsv) — `month, total,
 critical, high, moderate, low`.
 
@@ -69,6 +70,7 @@ stable-channel desktop posts, per disclosure month. Flat 2025 (8–34/month),
 then the AI-era explosion: 95 → 124 → 370 (Mar–May 2026), peaking at **1,017
 in June 2026** — more than all of 2025 combined.
 
+Source: [Chrome Releases blog](https://chromereleases.googleblog.com/).
 Data: [`data/chrome_monthly.tsv`](data/chrome_monthly.tsv) — `month, bug_count`.
 
 ## Microsoft
@@ -84,6 +86,7 @@ discloses online-service CVEs alongside product fixes; third-party CNA rows
 mirrored into the guide (Chromium, GitHub, MITRE, ... — counted by the Chrome
 and GHSA trackers here) are excluded.
 
+Source: [MSRC Security Update Guide](https://msrc.microsoft.com/update-guide) (CVRF v3.0 API).
 Data: [`data/msrc_monthly.tsv`](data/msrc_monthly.tsv) — `month, total,
 critical, important, moderate, low, unknown`.
 
@@ -100,6 +103,7 @@ older CVE ids cleared from the team's backlog. CVEs later rejected drop out
 retroactively (current-state counting). No severity breakdown — the kernel
 team deliberately does not score CVEs.
 
+Source: [kernel.org CNA `vulns.git`](https://git.kernel.org/pub/scm/linux/security/vulns.git).
 Data: [`data/kernel_monthly.tsv`](data/kernel_monthly.tsv) — `month, total`.
 
 ## Red Hat
@@ -117,6 +121,7 @@ revisions backdate into that month's counts; a CVE fixed by advisories in
 several months counts in each (each is a distinct fix delivery). Severity is
 the maximum advisory rating (Critical > Important > Moderate > Low).
 
+Source: [Red Hat Security Data API](https://access.redhat.com/hydra/rest/securitydata/csaf.json).
 Data: [`data/redhat_monthly.tsv`](data/redhat_monthly.tsv) — `month, total,
 critical, important, moderate, low, unknown`.
 
@@ -129,6 +134,7 @@ Advisory Database), per publication month. The pace accelerated from ~300/month
 in 2025 to 1,500–1,700/month at the spring 2026 peak. Cumulative since
 2025-01-01: 13,694 as of 2026-09-05 (snapshot log tracks the running total).
 
+Source: [github.com/advisories](https://github.com/advisories).
 Data: [`data/ghsa_monthly.tsv`](data/ghsa_monthly.tsv) — `month, ghsa`;
 [`data/ghsa_counts.tsv`](data/ghsa_counts.tsv) — `snapshot_date, reviewed`.
 
@@ -146,6 +152,7 @@ the GHSAs the project itself published (deduplicated by GHSA ID);
 RabbitMQ: 95 affecting / 86 published-by as of 2026-09-05, with a large batch
 in July 2026.
 
+Source: [rabbitmq/rabbitmq-server security advisories](https://github.com/rabbitmq/rabbitmq-server/security/advisories).
 Data: `data/rabbitmq_ghsa_{counts,monthly}.tsv` — columns
 `affecting, published_by` (the `_published_chart.svg` variants chart the
 published_by series).
@@ -162,6 +169,7 @@ package-database package and its repo advisories are not in the GitHub Advisory
 Database, so here `affecting` equals the repo-published stream and the
 `_published_chart.svg` variant is the exact one.
 
+Source: [microsoft/vscode security advisories](https://github.com/microsoft/vscode/security/advisories).
 Data: `data/vscode_ghsa_{counts,monthly}.tsv` — columns
 `affecting, published_by`.
 
