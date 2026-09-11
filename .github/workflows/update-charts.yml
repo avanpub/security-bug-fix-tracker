@@ -77,6 +77,10 @@ jobs:
               --counts data/vscode_ghsa_counts.tsv \
               --monthly data/vscode_ghsa_monthly.tsv \
               --chart charts/vscode_ghsa_chart.svg
+          run_tracker ghsa-keycloak python3 scripts/ghsa_count.py --project keycloak --series both \
+              --counts data/keycloak_ghsa_counts.tsv \
+              --monthly data/keycloak_ghsa_monthly.tsv \
+              --chart charts/keycloak_ghsa_chart.svg
           exit 0
 
       - name: Commit and push if changed

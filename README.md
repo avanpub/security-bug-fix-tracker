@@ -173,6 +173,23 @@ Source: [microsoft/vscode security advisories](https://github.com/microsoft/vsco
 Data: `data/vscode_ghsa_{counts,monthly}.tsv` — columns
 `affecting, published_by`.
 
+### Keycloak
+
+![Keycloak GitHub Advisories by Month](charts/keycloak_ghsa_chart.svg)
+
+Keycloak: 82 affecting / 82 published-by as of 2026-09-11, all announced by the
+`keycloak/keycloak` repo. 2025 was quiet (0–3/month, 16 total); 2026 clusters
+into two batches — 8 in June and 7 in August — for 16 so far. A plain
+`affects=keycloak` package query matches nothing, so without a token `affecting`
+equals the repo-published stream and the `_published_chart.svg` variant is the
+exact one; run with a token, the tracker also discovers the Maven package names
+(`org.keycloak:keycloak-*`) and `affecting` picks up those package-database
+matches too.
+
+Source: [keycloak/keycloak security advisories](https://github.com/keycloak/keycloak/security/advisories).
+Data: `data/keycloak_ghsa_{counts,monthly}.tsv` — columns
+`affecting, published_by`.
+
 ## Methodology
 
 | Tracker | Source | Counting |
@@ -246,6 +263,11 @@ python3 scripts/ghsa_count.py --project vscode --series both \
     --counts data/vscode_ghsa_counts.tsv \
     --monthly data/vscode_ghsa_monthly.tsv \
     --chart charts/vscode_ghsa_chart.svg
+
+python3 scripts/ghsa_count.py --project keycloak --series both \
+    --counts data/keycloak_ghsa_counts.tsv \
+    --monthly data/keycloak_ghsa_monthly.tsv \
+    --chart charts/keycloak_ghsa_chart.svg
 ```
 
 `--chart-only` regenerates a chart from the existing TSV without network
@@ -269,7 +291,7 @@ with identical results.
 
 A weekly GitHub Actions workflow
 (`.github/workflows/update-charts.yml`) refreshes everything automatically:
-every Monday (~05:17 UTC) it runs all nine trackers and commits any changed
+every Monday (~05:17 UTC) it runs all ten trackers and commits any changed
 files under `data/` and `charts/` as `github-actions[bot]`. No secrets to
 configure — the workflow's built-in token powers the GHSA monthly series, and
 the fetched-source cache (`.cache/`) is persisted between runs. You can also

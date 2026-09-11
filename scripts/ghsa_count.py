@@ -89,6 +89,11 @@ PROJECTS = {
         "packages": ["vscode"],
         "repos": ["microsoft/vscode"],
     },
+    "keycloak": {
+        "title": "Keycloak",
+        "packages": [],
+        "repos": ["keycloak/keycloak"],
+    },
 }
 
 _GHSA_RE = re.compile(r"GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}")
