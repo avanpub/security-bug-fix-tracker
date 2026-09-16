@@ -289,9 +289,9 @@ with identical results.
 
 ## Updating this repo
 
-A weekly GitHub Actions workflow
+A daily GitHub Actions workflow
 (`.github/workflows/update-charts.yml`) refreshes everything automatically:
-every Monday (~05:17 UTC) it runs all ten trackers and commits any changed
+every day (~02:17 UTC) it runs all ten trackers and commits any changed
 files under `data/` and `charts/` as `github-actions[bot]`. No secrets to
 configure — the workflow's built-in token powers the GHSA monthly series, and
 the fetched-source cache (`.cache/`) is persisted between runs. You can also

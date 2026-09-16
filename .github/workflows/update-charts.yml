@@ -2,8 +2,8 @@ name: Update tracker data and charts
 
 on:
   schedule:
-    # Mondays 05:17 UTC (off-peak minute; runs may be delayed a few minutes)
-    - cron: "17 5 * * 1"
+    # Daily 02:17 UTC (off-peak minute; runs may be delayed a few minutes)
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
 permissions:
