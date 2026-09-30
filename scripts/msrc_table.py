@@ -56,7 +56,11 @@ Cache: computed per-month aggregates for completed months live in
 .cache/msrc_monthly_totals.json (gitignored) — completed-month windows are
 immutable history, so they are never refetched; the current month is
 recomputed from a fresh document fetch on every run. --no-cache bypasses the
-cache entirely with identical results.
+cache entirely with identical results. Months missing from the CVRF updates
+index (a transient API gap: the document itself still resolves) are handled
+by falling back to cached aggregates, else to a canonical "YYYY-Mon" document
+fetch; only months with no document at all (e.g. the not-yet-published
+current month) are written as zero rows.
 """
 import argparse
 import csv
@@ -65,6 +69,7 @@ import json
 import os
 import re
 import sys
+import urllib.error
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -105,6 +110,14 @@ PALETTES = {
 
 _CACHE_NAME = "msrc_monthly_totals.json"
 _RULE_VERSION = 2
+
+
+def _canonical_doc_id(month: str) -> str | None:
+    """Canonical CVRF document id for a month key (YYYY-MM), or None if the
+    month predates the tokenless CVRF v3.0 archive (which starts 2016-04)."""
+    y, m = int(month[:4]), int(month[5:7])
+    return f"{y:04d}-{['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1]}"
 
 
 def _month_keys(since: datetime.date, today: datetime.date) -> list[str]:
@@ -268,15 +281,19 @@ def _save_cache(months: dict) -> None:
 
 def _collect(since: datetime.date, today: datetime.date,
              use_cache: bool) -> dict[str, dict]:
-    """Month key -> {"tuesday", "total", "sev"} for every month doc found in
-    [since, today]. Completed months may come from cache; the current month
-    is always recomputed from a fresh fetch."""
+    """Month key -> {"tuesday", "total", "sev"} for every month in
+    [since, today]. The MSRC updates index maps months to documents, but it
+    intermittently drops recent entries, so for a month with no index entry
+    (and no cache record) the canonical "YYYY-Mon" document id is fetched
+    directly — a month whose document genuinely does not exist yet returns
+    404 and is written as zeros. Completed months may come from cache; the
+    current month is always recomputed from a fresh fetch."""
     body, _headers = net_http.http_request(
         UPDATES_URL, headers={"Accept": "application/json"},
         timeout=120, tag="msrc-updates")
     updates = json.loads(body).get("value") or []
 
-    wanted: dict[str, str] = {}  # month key -> doc id
+    wanted: dict[str, str] = {}  # month key -> doc id, from the index
     for entry in updates:
         doc_id = entry.get("ID") or entry.get("Alias") or ""
         month = _doc_month(doc_id, entry)
@@ -287,14 +304,45 @@ def _collect(since: datetime.date, today: datetime.date,
     cache = _load_cache() if use_cache else {}
     result: dict[str, dict] = {}
     fetched = cached = 0
-    for month in sorted(wanted):
-        doc_id = wanted[month]
-        if use_cache and month in cache and month != current_month:
-            rec = cache[month]
-            if isinstance(rec, dict) and "total" in rec and "sev" in rec:
-                result[month] = {"tuesday": rec.get("tuesday"),
-                                 "total": rec["total"], "sev": rec["sev"]}
-                cached += 1
+    for month in _month_keys(since, today):
+        # Completed-month aggregates are immutable history, so a cache
+        # record — even one for a month the updates index currently omits
+        # — is preferred over refetching with the current rule (which
+        # would silently rewrite past months; the current month is never
+        # cached and stays fresh by design).
+        rec = cache.get(month) if (use_cache and month != current_month) else None
+        if isinstance(rec, dict) and "total" in rec and "sev" in rec:
+            result[month] = {"tuesday": rec.get("tuesday"),
+                             "total": rec["total"], "sev": rec["sev"]}
+            cached += 1
+            continue
+        doc_id = wanted.get(month)
+        if doc_id is None:
+            # Month has no entry in the updates index: either a transient
+            # API-index gap (the document itself still resolves) or a
+            # not-yet-published month. Canonical "YYYY-Mon" ids resolve for
+            # both 2016+ months and current months; a 404 means the
+            # document genuinely does not exist (yet) and the month is
+            # left out — main() renders it as a zero row.
+            canonical = _canonical_doc_id(month)
+            if canonical:
+                try:
+                    body, _headers = net_http.http_request(
+                        f"{CVRF_URL}{canonical}",
+                        headers={"Accept": "application/json"},
+                        timeout=300, tag=f"msrc-{canonical}")
+                except urllib.error.HTTPError as exc:
+                    if exc.code == 404:
+                        print(f"note: {month}: no document yet ({canonical} "
+                              f"not published)")
+                        continue
+                    raise
+                doc_id = canonical
+                print(f"note: {month}: absent from the updates index; "
+                      f"fetched {doc_id} directly")
+            else:
+                print(f"note: {month}: predates the CVRF archive; "
+                      f"leaving month empty")
                 continue
         body, _headers = net_http.http_request(
             f"{CVRF_URL}{doc_id}", headers={"Accept": "application/json"},
@@ -312,7 +360,7 @@ def _collect(since: datetime.date, today: datetime.date,
     if use_cache:
         _save_cache(cache)
     print(f"note: {cached} completed months from cache, {fetched} fetched "
-          f"fresh, {len(wanted)} months with documents")
+          f"fresh, {len(_month_keys(since, today))} months in range")
     return result
 
 
@@ -388,6 +436,16 @@ def main() -> int:
         print(f"error: MSRC fetch failed ({exc}); nothing was written")
         return 1
 
+    # Completed months are immutable history: a previously non-zero total
+    # must never be replaced by a zero row. That combination can only mean
+    # the month's document (and its cache record) failed to resolve, e.g.
+    # while the MSRC updates index is temporarily incomplete — treat it as a
+    # tracker failure and keep the previous TSV/chart instead of writing 0.
+    try:
+        previous = {r[0]: r[1] for r in _read_tsv(args.out)}
+    except (OSError, ValueError):
+        previous = {}
+
     rows = []
     for m in _month_keys(since, today):
         rec = months.get(m)
@@ -400,6 +458,18 @@ def main() -> int:
                 if sev in counts:
                     counts[sev] = n
         rows.append([m, total, *(counts[s] for s in SEVERITIES + ["unknown"])])
+
+    regressed = [(m, previous[m]) for m, total, *_s in rows
+                 if total == 0 and previous.get(m, 0) > 0]
+    if regressed:
+        for m, prev_total in regressed:
+            print(f"error: {m}: counts went from {prev_total} to 0; the "
+                  f"month's document could not be resolved (not in the MSRC "
+                  f"updates index and not served by direct fetch)")
+        print(f"error: refusing to overwrite known history in {args.out} "
+              f"and {args.chart}; leaving both unchanged")
+        return 1
+
     _write_tsv(rows, args.out)
     for m, total, *_sev in rows:
         print(f"{m}: {total} CVEs")
