@@ -116,8 +116,9 @@ def _canonical_doc_id(month: str) -> str | None:
     """Canonical CVRF document id for a month key (YYYY-MM), or None if the
     month predates the tokenless CVRF v3.0 archive (which starts 2016-04)."""
     y, m = int(month[:4]), int(month[5:7])
-    return f"{y:04d}-{['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1]}"
+    month_name = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1]
+    return f"{y:04d}-{month_name}"
 
 
 def _month_keys(since: datetime.date, today: datetime.date) -> list[str]:
