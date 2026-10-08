@@ -56,8 +56,8 @@
 <text x="827.2" y="522.9" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">438</text>
 <rect x="864.7" y="450.7" width="32.1" height="160.8" fill="#ee0000"/>
 <text x="880.8" y="448.2" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">818</text>
-<rect x="918.2" y="461.3" width="32.1" height="150.2" fill="#ee0000"/>
-<text x="934.2" y="458.8" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">764</text>
+<rect x="918.2" y="461.5" width="32.1" height="150.0" fill="#ee0000"/>
+<text x="934.2" y="459.0" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">763</text>
 <rect x="971.7" y="427.7" width="32.1" height="183.8" fill="#ee0000"/>
 <text x="987.8" y="425.2" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">935</text>
 <rect x="1025.2" y="375.4" width="32.1" height="236.1" fill="#ee0000"/>
@@ -66,8 +66,8 @@
 <text x="1094.8" y="326.5" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">1437</text>
 <rect x="1132.2" y="200.0" width="32.1" height="411.5" fill="#ee0000"/>
 <text x="1148.2" y="197.5" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">2093</text>
-<rect x="1185.7" y="501.2" width="32.1" height="110.3" fill="#ee0000" opacity="0.35"/><rect x="1185.7" y="501.2" width="32.1" height="110.3" fill="url(#stripes)"/>
-<text x="1201.8" y="498.7" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">561*</text>
+<rect x="1185.7" y="493.1" width="32.1" height="118.4" fill="#ee0000" opacity="0.35"/><rect x="1185.7" y="493.1" width="32.1" height="118.4" fill="url(#stripes)"/>
+<text x="1201.8" y="490.6" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">602*</text>
 <text x="78.2" y="635" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#b3b3b8">JAN</text>
 <text x="78.2" y="665" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#b3b3b8">2025</text>
 <text x="131.8" y="635" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#b3b3b8">FEB</text>
@@ -113,6 +113,6 @@
 <text x="1201.8" y="635" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#b3b3b8">OCT</text>
 <text x="1201.8" y="665" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#b3b3b8">2026</text>
 <text x="53.0" y="88.0" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="45" font-weight="700" fill="#151515">Red Hat Security Fixes (CVEs) by Month</text>
-<text x="53.0" y="127.0" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24" fill="#4d4d4d">Red Hat Security Data API (CSAF) · Data through Oct 7, 2026</text>
+<text x="53.0" y="127.0" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24" fill="#4d4d4d">Red Hat Security Data API (CSAF) · Data through Oct 8, 2026</text>
 <text x="1228.5" y="700" text-anchor="end" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#b3b3b8">* current month, still in progress</text>
 </svg>
