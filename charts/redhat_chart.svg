@@ -66,8 +66,8 @@
 <text x="1094.8" y="331.9" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">1435</text>
 <rect x="1132.2" y="200.0" width="32.1" height="411.5" fill="#ee0000"/>
 <text x="1148.2" y="197.5" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">2131</text>
-<rect x="1185.7" y="428.8" width="32.1" height="182.7" fill="#ee0000" opacity="0.35"/><rect x="1185.7" y="428.8" width="32.1" height="182.7" fill="url(#stripes)"/>
-<text x="1201.8" y="426.3" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">946*</text>
+<rect x="1185.7" y="410.3" width="32.1" height="201.2" fill="#ee0000" opacity="0.35"/><rect x="1185.7" y="410.3" width="32.1" height="201.2" fill="url(#stripes)"/>
+<text x="1201.8" y="407.8" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#151515">1042*</text>
 <text x="78.2" y="635" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#b3b3b8">JAN</text>
 <text x="78.2" y="665" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#b3b3b8">2025</text>
 <text x="131.8" y="635" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#b3b3b8">FEB</text>
