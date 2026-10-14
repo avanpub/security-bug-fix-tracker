@@ -66,8 +66,8 @@
 <text x="1094.8" y="449.8" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#ffffff">164</text>
 <rect x="1132.2" y="354.3" width="32.1" height="257.2" fill="#e4d7fc"/>
 <text x="1148.2" y="351.8" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#ffffff">265</text>
-<rect x="1185.7" y="610.5" width="32.1" height="1.0" fill="#e4d7fc" opacity="0.35"/><rect x="1185.7" y="610.5" width="32.1" height="1.0" fill="url(#stripes)"/>
-<text x="1201.8" y="608.0" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#ffffff">1*</text>
+<rect x="1185.7" y="534.8" width="32.1" height="76.7" fill="#e4d7fc" opacity="0.35"/><rect x="1185.7" y="534.8" width="32.1" height="76.7" fill="url(#stripes)"/>
+<text x="1201.8" y="532.3" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24.1" font-weight="600" fill="#ffffff">79*</text>
 <text x="78.2" y="635" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#ae89ff">JAN</text>
 <text x="78.2" y="665" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#ae89ff">2025</text>
 <text x="131.8" y="635" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#ae89ff">FEB</text>
@@ -113,6 +113,6 @@
 <text x="1201.8" y="635" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#ae89ff">OCT</text>
 <text x="1201.8" y="665" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="21.4" fill="#ae89ff">2026</text>
 <text x="53.0" y="88.0" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="45" font-weight="700" fill="#ffffff">Firefox Security Bug Fixes by Month</text>
-<text x="53.0" y="127.0" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24" fill="#c4a8fc">All Sources · All Severities · Data through Oct 6, 2026</text>
+<text x="53.0" y="127.0" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="24" fill="#c4a8fc">All Sources · All Severities · Data through Oct 13, 2026</text>
 <text x="1228.5" y="700" text-anchor="end" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#ae89ff">* current month, still in progress</text>
 </svg>
